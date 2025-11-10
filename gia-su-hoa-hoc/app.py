@@ -63,7 +63,7 @@ def load_knowledge_base():
 
 knowledge_texts = load_knowledge_base()
 
-# --- TÌM KIẾM NGỮ NGHĨA VỚI FAISS ---
+# --- TÌM KIẾM NGỮ NGHĨA (FAISS) ---
 @st.cache_resource
 def build_semantic_index(knowledge_texts):
     if not knowledge_texts:
@@ -108,9 +108,9 @@ def search_knowledge_semantic(query, top_k=3):
 if "chat_session" not in st.session_state:
     system_instruction = r"""
 Bạn là "Gia Sư AI Hóa học THCS" — chuyên nghiệp, thân thiện, và kiên nhẫn.
-✅ ƯU TIÊN TUYỆT ĐỐI: Nếu có tài liệu liên quan trong '📚 KIẾN THỨC CẦN THAM KHẢO', phải dùng nó trước và trích dẫn nguồn (VD: Theo [Tên file]).
-Chỉ khi không có kiến thức trong tài liệu thì mới được phép dùng kiến thức nền của bạn.
-Câu trả lời phải bằng tiếng Việt, rõ ràng, có giải thích từng bước, trình bày công thức bằng LaTeX.
+✅ ƯU TIÊN TUYỆT ĐỐI: Nếu có tài liệu liên quan trong '📚 KIẾN THỨC CẦN THAM KHẢO', bạn PHẢI dựa hoàn toàn vào đó để trả lời. 
+Chỉ khi không có kiến thức nào phù hợp, bạn mới được phép dùng kiến thức nền.
+Mọi công thức và phương trình phải hiển thị bằng LaTeX.
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
     st.session_state.chat_session = client.chats.create(model="gemini-2.5-pro", config=config)
@@ -122,21 +122,40 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- GIAO DIỆN NGƯỜI DÙNG ---
+# --- GIAO DIỆN ---
 uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", type=["jpg", "jpeg", "png"])
 user_question = st.chat_input("✏️ Nhập câu hỏi Hóa học...")
 
 if user_question:
     kb_context = search_knowledge_semantic(user_question)
     contents = []
+
     if uploaded_file:
         img_part = types.Part.from_bytes(data=uploaded_file.read(), mime_type=uploaded_file.type)
         contents.append(img_part)
 
-    full_prompt = (
-        f"📚 KIẾN THỨC CẦN THAM KHẢO:\n{kb_context}\n\n---\n\n{user_question}"
-        if kb_context else user_question
-    )
+    # 🚨 PHẦN QUAN TRỌNG NHẤT: ÉP BUỘC ƯU TIÊN TÀI LIỆU
+    if kb_context:
+        full_prompt = f"""
+❗ Bạn PHẢI TUYỆT ĐỐI dựa vào thông tin trong phần dưới đây để trả lời.
+Nếu câu hỏi không nằm trong tài liệu này, hãy trả lời: "Kiến thức này không có trong tài liệu được cung cấp."
+
+📚 KIẾN THỨC CẦN THAM KHẢO:
+{kb_context}
+
+---
+Câu hỏi của học sinh:
+{user_question}
+"""
+    else:
+        full_prompt = f"""
+Không có tài liệu tham khảo liên quan. 
+Hãy trả lời dựa trên kiến thức nền tảng của bạn, theo chương trình Hóa học THCS (2018).
+
+Câu hỏi:
+{user_question}
+"""
+
     contents.append(full_prompt)
 
     with st.chat_message("Học sinh"):
@@ -155,7 +174,7 @@ if user_question:
     st.session_state.messages.append({"role": "Gia Sư", "content": reply})
     st.rerun()
 
-# --- QUẢN TRỊ ---
+# --- KHU VỰC QUẢN TRỊ ---
 with st.sidebar:
     st.header("🔐 Khu vực quản trị")
     pwd = st.text_input("Nhập mật khẩu admin:", type="password")
