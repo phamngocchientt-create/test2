@@ -68,13 +68,16 @@ knowledge_texts = load_knowledge_base()
 def build_semantic_index(knowledge_texts):
     if not knowledge_texts:
         return None
-    model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    # Model được tinh chỉnh cho đa ngôn ngữ, hỗ trợ tiếng Việt tốt
+    model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") 
 
     chunks, meta = [], []
     for item in knowledge_texts:
+        # Tách tài liệu thành các đoạn văn ngắn hơn
         for para in item["content"].split("\n"):
             para = para.strip()
-            if len(para) > 60:
+            # Bỏ qua các đoạn quá ngắn
+            if len(para) > 60: 
                 chunks.append(para)
                 meta.append(item["filename"])
 
@@ -86,7 +89,7 @@ def build_semantic_index(knowledge_texts):
 
 semantic_index = build_semantic_index(knowledge_texts)
 
-def search_knowledge_semantic(query, top_k=10): # Đã tăng top_k lên 10
+def search_knowledge_semantic(query, top_k=5): # Giảm top_k xuống 5 để Context cô đọng hơn
     if not semantic_index:
         return None
     model = semantic_index["model"]
@@ -98,22 +101,37 @@ def search_knowledge_semantic(query, top_k=10): # Đã tăng top_k lên 10
     D, I = index.search(np.array(q_emb, dtype=np.float32), top_k)
 
     results = []
-    for idx, score in zip(I[0], D[0]):
-        if score < 0.25:
-            continue
-        results.append(f"📘 [Tài liệu: {meta[idx]}]\n{chunks[idx]}")
+    # Chỉ lấy các kết quả có điểm tương đồng (score) cao
+    for idx, score in zip(I[0], D[0]): 
+        # Ngưỡng (Threshold) đã điều chỉnh để yêu cầu sự liên quan cao hơn
+        if score > 0.65: 
+            results.append(f"📘 [Tài liệu: {meta[idx]}]\n{chunks[idx]}")
     return "\n\n---\n".join(results) if results else None
 
 # --- HỆ THỐNG CHAT ---
 if "chat_session" not in st.session_state:
+    # 📌 ĐÃ SỬA: Nâng cấp System Instruction
     system_instruction = r"""
-Bạn là "Gia Sư AI Hóa học THCS" — chuyên nghiệp, thân thiện, và kiên nhẫn.
-✅ ƯU TIÊN TUYỆT ĐỐI: Nếu có tài liệu liên quan trong '📚 KIẾN THỨC CẦN THAM KHẢO', bạn PHẢI dựa hoàn toàn vào đó để trả lời.
-Chỉ khi không có kiến thức nào phù hợp, bạn mới được phép dùng kiến thức nền.
-Mọi công thức và phương trình phải hiển thị bằng LaTeX. Câu trả lời phải bằng tiếng Việt.
+BẠN LÀ AI: Bạn là "Gia Sư AI Hóa học THCS" – chuyên nghiệp, thân thiện, và kiên nhẫn.
+Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
+
+**QUY TẮC CHƯƠNG TRÌNH & THUẬT NGỮ:**
+1. **Tuân thủ Tuyệt đối:** PHẢI tuân thủ **Chương trình Giáo dục Phổ thông 2018**. Tránh kiến thức cũ trừ khi được hỏi cụ thể.
+2. **Thuật ngữ thống nhất:** Sử dụng thuật ngữ Hóa học bằng **Tiếng Anh** (Ví dụ: Acid, Base, Oxide, Sodium, Potassium) thay vì tiếng Việt (axit, bazơ, oxit, natri, kali).
+3. **Thể tích mol:** Luôn sử dụng điều kiện chuẩn ($\text{25}^{\circ}\text{C}$ và $1\ \text{bar}$), thể tích mol là $24,79\ \text{L}/\text{mol}$, trừ khi đề bài ghi rõ ĐKTC ($0^{\circ}\text{C}$ và $1\ \text{atm}$).
+
+1. **QUY TẮC BẮT BUỘC SỬ DỤNG VÀ TRÍCH DẪN KIẾN THỨC (CONTEXT)**
+    - KHU VỰC CONTEXT (Nguồn thông tin DUY NHẤT để trích dẫn) được xác định bởi thẻ **<KB_START>** và **<KB_END>**.
+    - **ƯU TIÊN TUYỆT ĐỐI:** NẾU có Context liên quan (<KB_START>...</KB_END>), bạn PHẢI dựa hoàn toàn vào đó để trả lời.
+    - **CÁCH TRÍCH DẪN BẮT BUỘC:** Bạn PHẢI trích dẫn nguồn ngay sau khi sử dụng thông tin đó (Ví dụ: Theo [Tên file]).
+    - **HÌNH PHẠT:** KHÔNG được trích dẫn bất kỳ nguồn nào KHÔNG nằm trong khu vực <KB_START>...</KB_END>. Nếu trích dẫn sai hoặc bỏ qua Context liên quan, câu trả lời bị coi là không chuyên biệt.
+    - **FALLBACK:** Chỉ khi Context không có, mới được dùng kiến thức nền tảng và **KHÔNG TRÍCH DẪN NGUỒN**.
+
+2. **ĐỊNH DẠNG TRẢ LỜI:**
+    - Trả lời bằng tiếng Việt, chi tiết từng bước.
+    - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp $\text{\LaTeX}$ (dùng '$' hoặc '$$').
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
-    # Đã đổi model sang gemini-2.5-flash
     st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
 
 if "messages" not in st.session_state:
@@ -128,30 +146,33 @@ uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", type=[
 user_question = st.chat_input("✏️ Nhập câu hỏi Hóa học...")
 
 if user_question:
+    # Bước 1: Tìm kiếm Context
     kb_context = search_knowledge_semantic(user_question)
+    
     contents = []
 
     if uploaded_file:
         img_part = types.Part.from_bytes(data=uploaded_file.read(), mime_type=uploaded_file.type)
         contents.append(img_part)
 
-    # 🚨 PHẦN QUAN TRỌNG NHẤT: CẤU TRÚC PROMPT MỚI
+    # Bước 2: Xây dựng Prompt (Phân biệt Có KB và Không có KB)
     if kb_context:
+        # Trường hợp 1: CÓ Context (Áp dụng thẻ KB_START/KB_END)
         full_prompt = f"""
-❗ Bạn PHẢI TUYỆT ĐỐI dựa vào thông tin trong phần dưới đây để trả lời và trích dẫn nguồn (VD: Theo [Tên file]) khi sử dụng.
-Nếu câu hỏi không nằm trong tài liệu này, hãy trả lời: "Kiến thức này không có trong tài liệu được cung cấp."
-
+<KB_START>
 📚 KIẾN THỨC CẦN THAM KHẢO:
 {kb_context}
+<KB_END>
 
----
+--- HỎI ĐÁP ---
 Câu hỏi của học sinh:
 {user_question}
 """
     else:
+        # Trường hợp 2: KHÔNG CÓ Context
         full_prompt = f"""
-Không có tài liệu tham khảo liên quan.
-Hãy trả lời dựa trên kiến thức nền tảng của bạn, theo chương trình Hóa học THCS (2018).
+Không có tài liệu tham khảo liên quan được tìm thấy.
+Hãy trả lời dựa trên kiến thức nền tảng của bạn (theo Chương trình GDPT 2018).
 
 Câu hỏi:
 {user_question}
@@ -159,6 +180,7 @@ Câu hỏi:
 
     contents.append(full_prompt)
 
+    # Bước 3: Gửi và Hiển thị
     with st.chat_message("Học sinh"):
         st.markdown(user_question)
     st.session_state.messages.append({"role": "Học sinh", "content": user_question})
@@ -168,7 +190,6 @@ Câu hỏi:
             response = st.session_state.chat_session.send_message(contents)
             reply = response.text
         except Exception as e:
-            # Xử lý lỗi chi tiết hơn để dễ debug
             reply = f"⚠️ Lỗi xử lý API Gemini: {type(e).__name__}: {e}. Vui lòng thử lại hoặc hỏi câu khác."
 
     with st.chat_message("Gia Sư"):
