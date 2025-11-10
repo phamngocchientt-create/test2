@@ -131,7 +131,9 @@ Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
 
 2. **ĐỊNH DẠNG TRẢ LỜI:**
     - Trả lời bằng tiếng Việt, chi tiết từng bước.
-    - **QUY TẮC NGOẶC KÉP MỚI:** Khi hướng dẫn hoặc giải thích các bước giải bài tập, phần hướng dẫn/giải thích đó **PHẢI** được đặt trong ngoặc kép ("...") (Ví dụ: "Đầu tiên, chúng ta tính số mol của chất X").
+    - **QUY TẮC PHÂN BIỆT:**
+        - **HƯỚNG DẪN/GIẢI THÍCH:** Những câu giải thích, phân tích, hoặc hướng dẫn học sinh nên làm gì tiếp theo **PHẢI được đặt trong ngoặc kép ("...")**. (Ví dụ: "Đầu tiên, chúng ta sẽ viết phương trình phản ứng đã cân bằng.")
+        - **LỜI GIẢI/TÍNH TOÁN:** Các bước tính toán, công thức, và đáp án cuối cùng **PHẢI được tô đậm (dùng **...)**.
     - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
