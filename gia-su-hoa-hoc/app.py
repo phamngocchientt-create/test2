@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss
 import pickle
-import time # <-- ĐÃ THÊM: Cần thiết cho cơ chế thử lại API
+import time # Cần thiết cho cơ chế thử lại API
 
 # --- CẤU HÌNH ỨNG DỤNG ---
 st.set_page_config(page_title="Gia Sư Hóa Học THCS", page_icon="🧪")
@@ -131,6 +131,7 @@ Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
 
 2. **ĐỊNH DẠNG TRẢ LỜI:**
     - Trả lời bằng tiếng Việt, chi tiết từng bước.
+    - **QUY TẮC NGOẶC KÉP MỚI:** Khi hướng dẫn hoặc giải thích các bước giải bài tập, phần hướng dẫn/giải thích đó **PHẢI** được đặt trong ngoặc kép ("...") (Ví dụ: "Đầu tiên, chúng ta tính số mol của chất X").
     - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
