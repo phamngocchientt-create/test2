@@ -7,7 +7,8 @@ from docx import Document
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss
-import pickle # Cần thiết cho Semantic Search
+import pickle
+import time # <-- ĐÃ THÊM: Cần thiết cho cơ chế thử lại API
 
 # --- CẤU HÌNH ỨNG DỤNG ---
 st.set_page_config(page_title="Gia Sư Hóa Học THCS", page_icon="🧪")
@@ -105,13 +106,12 @@ def search_knowledge_semantic(query, top_k=5):
 
     results = []
     for idx, score in zip(I[0], D[0]): 
-        if score > 0.65: # Ngưỡng để Context phải liên quan cao
+        if score > 0.65:
             results.append(f"📘 [Tài liệu: {meta[idx]}]\n{chunks[idx]}")
     return "\n\n---\n".join(results) if results else None
 
 # --- HỆ THỐNG CHAT ---
 if "chat_session" not in st.session_state:
-    # 📌 SỬ DỤNG r""" VÀ KÝ TỰ CHUẨN ĐỂ TRÁNH LỖI U+00A0
     system_instruction = r"""
 BẠN LÀ AI: Bạn là "Gia Sư AI Hóa học THCS" – chuyên nghiệp, thân thiện, và kiên nhẫn.
 Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
@@ -143,7 +143,7 @@ for msg in st.session_state.messages:
 # --- GIAO DIỆN VÀ XỬ LÝ INPUT (ĐÃ SỬA LỖI LẶP VÀ HỎI LẠI UX) ---
 uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", 
                                  type=["jpg", "jpeg", "png"],
-                                 key=st.session_state['file_key']) # Dùng key để reset
+                                 key=st.session_state['file_key'])
 user_question = st.chat_input("✏️ Nhập câu hỏi Hóa học...")
 
 # 1. Logic xử lý ảnh: Lưu ảnh và hỏi lại (Ngăn chatbot tự ý trả lời)
@@ -152,7 +152,7 @@ if uploaded_file and not user_question and st.session_state.uploaded_image is No
         "bytes": uploaded_file.read(),
         "type": uploaded_file.type
     }
-    st.session_state['file_key'] += 1 # Reset file uploader
+    st.session_state['file_key'] += 1
     
     st.session_state.messages.append({"role": "Học sinh", "content": "[Ảnh bài tập đã tải lên]"})
     st.session_state.messages.append({"role": "Gia Sư",
@@ -220,13 +220,32 @@ Câu hỏi:
         st.markdown(current_user_message)
     st.session_state.messages.append({"role": "Học sinh", "content": current_user_message})
 
+    # 📌 ĐÃ SỬA: BỔ SUNG CƠ CHẾ THỬ LẠI API (RETRY LOGIC)
     with st.spinner("⏳ Gia sư đang trả lời..."):
-        try:
-            response = st.session_state.chat_session.send_message(contents)
-            reply = response.text
-        except Exception as e:
-            reply = f"⚠️ Lỗi xử lý API Gemini: {type(e).__name__}: {e}. Vui lòng thử lại hoặc hỏi câu khác."
+        reply = None
+        MAX_RETRIES = 3
+        RETRY_DELAY = 5
 
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = st.session_state.chat_session.send_message(contents)
+                reply = response.text
+                break
+            except Exception as e:
+                error_message = str(e)
+                if "503 UNAVAILABLE" in error_message or "overloaded" in error_message:
+                    if attempt < MAX_RETRIES - 1:
+                        st.warning(f"⚠️ API bị quá tải (Lần {attempt + 1}/{MAX_RETRIES}). Đang thử lại sau {RETRY_DELAY} giây...")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        reply = f"❌ Sau {MAX_RETRIES} lần thử, API vẫn quá tải. Vui lòng thử lại sau vài phút."
+                else:
+                    reply = f"⚠️ Lỗi xử lý API Gemini không xác định: {type(e).__name__}: {e}. Vui lòng kiểm tra lại code hoặc API key."
+                    break
+
+        if reply is None:
+             reply = "⚠️ Lỗi: Không thể nhận phản hồi từ Gemini sau nhiều lần thử."
+             
     with st.chat_message("Gia Sư"):
         st.markdown(reply)
     st.session_state.messages.append({"role": "Gia Sư", "content": reply})
