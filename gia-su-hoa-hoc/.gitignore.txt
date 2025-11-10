@@ -1,0 +1,5 @@
+__pycache__/
+knowledge_base_index.faiss
+.streamlit/secrets.toml
+.env
+*.pyc
