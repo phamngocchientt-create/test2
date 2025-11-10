@@ -86,7 +86,7 @@ def build_semantic_index(knowledge_texts):
 
 semantic_index = build_semantic_index(knowledge_texts)
 
-def search_knowledge_semantic(query, top_k=3):
+def search_knowledge_semantic(query, top_k=5): # Đã tăng top_k lên 5
     if not semantic_index:
         return None
     model = semantic_index["model"]
@@ -108,12 +108,13 @@ def search_knowledge_semantic(query, top_k=3):
 if "chat_session" not in st.session_state:
     system_instruction = r"""
 Bạn là "Gia Sư AI Hóa học THCS" — chuyên nghiệp, thân thiện, và kiên nhẫn.
-✅ ƯU TIÊN TUYỆT ĐỐI: Nếu có tài liệu liên quan trong '📚 KIẾN THỨC CẦN THAM KHẢO', bạn PHẢI dựa hoàn toàn vào đó để trả lời. 
+✅ ƯU TIÊN TUYỆT ĐỐI: Nếu có tài liệu liên quan trong '📚 KIẾN THỨC CẦN THAM KHẢO', bạn PHẢI dựa hoàn toàn vào đó để trả lời.
 Chỉ khi không có kiến thức nào phù hợp, bạn mới được phép dùng kiến thức nền.
-Mọi công thức và phương trình phải hiển thị bằng LaTeX.
+Mọi công thức và phương trình phải hiển thị bằng LaTeX. Câu trả lời phải bằng tiếng Việt.
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
-    st.session_state.chat_session = client.chats.create(model="gemini-2.5-pro", config=config)
+    # Đã đổi model sang gemini-2.5-flash
+    st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -134,10 +135,10 @@ if user_question:
         img_part = types.Part.from_bytes(data=uploaded_file.read(), mime_type=uploaded_file.type)
         contents.append(img_part)
 
-    # 🚨 PHẦN QUAN TRỌNG NHẤT: ÉP BUỘC ƯU TIÊN TÀI LIỆU
+    # 🚨 PHẦN QUAN TRỌNG NHẤT: CẤU TRÚC PROMPT MỚI
     if kb_context:
         full_prompt = f"""
-❗ Bạn PHẢI TUYỆT ĐỐI dựa vào thông tin trong phần dưới đây để trả lời.
+❗ Bạn PHẢI TUYỆT ĐỐI dựa vào thông tin trong phần dưới đây để trả lời và trích dẫn nguồn (VD: Theo [Tên file]) khi sử dụng.
 Nếu câu hỏi không nằm trong tài liệu này, hãy trả lời: "Kiến thức này không có trong tài liệu được cung cấp."
 
 📚 KIẾN THỨC CẦN THAM KHẢO:
@@ -149,7 +150,7 @@ Câu hỏi của học sinh:
 """
     else:
         full_prompt = f"""
-Không có tài liệu tham khảo liên quan. 
+Không có tài liệu tham khảo liên quan.
 Hãy trả lời dựa trên kiến thức nền tảng của bạn, theo chương trình Hóa học THCS (2018).
 
 Câu hỏi:
@@ -167,7 +168,8 @@ Câu hỏi:
             response = st.session_state.chat_session.send_message(contents)
             reply = response.text
         except Exception as e:
-            reply = f"⚠️ Lỗi xử lý: {e}"
+            # Xử lý lỗi chi tiết hơn để dễ debug
+            reply = f"⚠️ Lỗi xử lý API Gemini: {type(e).__name__}: {e}. Vui lòng thử lại hoặc hỏi câu khác."
 
     with st.chat_message("Gia Sư"):
         st.markdown(reply)
