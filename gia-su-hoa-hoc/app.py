@@ -7,11 +7,20 @@ from docx import Document
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss
+import pickle # Cần thiết cho Semantic Search
 
 # --- CẤU HÌNH ỨNG DỤNG ---
 st.set_page_config(page_title="Gia Sư Hóa Học THCS", page_icon="🧪")
 st.title("🧪 Gia Sư Hóa Học THCS")
 
+# --- KHỞI TẠO TRẠNG THÁI (SESSION STATE) ---
+if 'file_key' not in st.session_state:
+    st.session_state['file_key'] = 0
+if 'uploaded_image' not in st.session_state:
+    st.session_state.uploaded_image = None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    
 # --- KHỞI TẠO GEMINI CLIENT ---
 @st.cache_resource
 def get_gemini_client():
@@ -29,7 +38,7 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
-# --- QUẢN LÝ TÀI LIỆU ---
+# --- QUẢN LÝ TÀI LIỆU (Giữ nguyên) ---
 knowledge_path = "knowledge_base"
 os.makedirs(knowledge_path, exist_ok=True)
 
@@ -68,28 +77,22 @@ knowledge_texts = load_knowledge_base()
 def build_semantic_index(knowledge_texts):
     if not knowledge_texts:
         return None
-    # Model được tinh chỉnh cho đa ngôn ngữ, hỗ trợ tiếng Việt tốt
     model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") 
-
     chunks, meta = [], []
     for item in knowledge_texts:
-        # Tách tài liệu thành các đoạn văn ngắn hơn
         for para in item["content"].split("\n"):
             para = para.strip()
-            # Bỏ qua các đoạn quá ngắn
-            if len(para) > 60: 
+            if len(para) > 60:
                 chunks.append(para)
                 meta.append(item["filename"])
-
     emb = model.encode(chunks, normalize_embeddings=True)
     index = faiss.IndexFlatIP(emb.shape[1])
     index.add(np.array(emb, dtype=np.float32))
-
     return {"index": index, "model": model, "chunks": chunks, "meta": meta}
 
 semantic_index = build_semantic_index(knowledge_texts)
 
-def search_knowledge_semantic(query, top_k=5): # Giảm top_k xuống 5 để Context cô đọng hơn
+def search_knowledge_semantic(query, top_k=5):
     if not semantic_index:
         return None
     model = semantic_index["model"]
@@ -101,16 +104,14 @@ def search_knowledge_semantic(query, top_k=5): # Giảm top_k xuống 5 để Co
     D, I = index.search(np.array(q_emb, dtype=np.float32), top_k)
 
     results = []
-    # Chỉ lấy các kết quả có điểm tương đồng (score) cao
     for idx, score in zip(I[0], D[0]): 
-        # Ngưỡng (Threshold) đã điều chỉnh để yêu cầu sự liên quan cao hơn
-        if score > 0.65: 
+        if score > 0.65: # Ngưỡng để Context phải liên quan cao
             results.append(f"📘 [Tài liệu: {meta[idx]}]\n{chunks[idx]}")
     return "\n\n---\n".join(results) if results else None
 
 # --- HỆ THỐNG CHAT ---
 if "chat_session" not in st.session_state:
-    # 📌 ĐÃ SỬA: Cập nhật System Instruction theo yêu cầu mới
+    # 📌 SỬ DỤNG r""" VÀ KÝ TỰ CHUẨN ĐỂ TRÁNH LỖI U+00A0
     system_instruction = r"""
 BẠN LÀ AI: Bạn là "Gia Sư AI Hóa học THCS" – chuyên nghiệp, thân thiện, và kiên nhẫn.
 Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
@@ -132,34 +133,65 @@ Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
     - Trả lời bằng tiếng Việt, chi tiết từng bước.
     - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
 """
-    config = types.GenerateContentConfig(system_instruction=system_instruction)
-    st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    config = types.GenerateContentConfig(system_instruction=system_instruction)
+    st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
 
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-# --- GIAO DIỆN ---
-uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", type=["jpg", "jpeg", "png"])
+# --- GIAO DIỆN VÀ XỬ LÝ INPUT (ĐÃ SỬA LỖI LẶP VÀ HỎI LẠI UX) ---
+uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", 
+                                 type=["jpg", "jpeg", "png"],
+                                 key=st.session_state['file_key']) # Dùng key để reset
 user_question = st.chat_input("✏️ Nhập câu hỏi Hóa học...")
 
+# 1. Logic xử lý ảnh: Lưu ảnh và hỏi lại (Ngăn chatbot tự ý trả lời)
+if uploaded_file and not user_question and st.session_state.uploaded_image is None:
+    st.session_state.uploaded_image = {
+        "bytes": uploaded_file.read(),
+        "type": uploaded_file.type
+    }
+    st.session_state['file_key'] += 1 # Reset file uploader
+    
+    st.session_state.messages.append({"role": "Học sinh", "content": "[Ảnh bài tập đã tải lên]"})
+    st.session_state.messages.append({"role": "Gia Sư",
+                                      "content": "Bạn đã tải ảnh bài tập lên thành công. **Bạn muốn tôi làm gì với bài tập trên?**"})
+    st.rerun()
+
+# 2. Logic xử lý yêu cầu khi có văn bản (có thể kèm ảnh đang chờ)
 if user_question:
-    # Bước 1: Tìm kiếm Context
-    kb_context = search_knowledge_semantic(user_question)
-    
-    contents = []
 
-    if uploaded_file:
-        img_part = types.Part.from_bytes(data=uploaded_file.read(), mime_type=uploaded_file.type)
-        contents.append(img_part)
+    image_bytes = None
+    image_type = None
 
-    # Bước 2: Xây dựng Prompt (Phân biệt Có KB và Không có KB)
-    if kb_context:
-        # Trường hợp 1: CÓ Context (Áp dụng thẻ KB_START/KB_END)
-        full_prompt = f"""
+    # Lấy ảnh đang chờ, nếu có (từ lần upload trước)
+    if st.session_state.uploaded_image is not None:
+        image_bytes = st.session_state.uploaded_image["bytes"]
+        image_type = st.session_state.uploaded_image["type"]
+        st.session_state.uploaded_image = None # Xóa ảnh khỏi trạng thái chờ
+
+    # Nếu có ảnh mới được tải lên ngay cùng câu hỏi (ưu tiên ảnh mới)
+    elif uploaded_file:
+        image_bytes = uploaded_file.read()
+        image_type = uploaded_file.type
+
+    current_user_message = user_question
+
+    # Bước 1: Tìm kiếm Context
+    kb_context = search_knowledge_semantic(current_user_message)
+    
+    contents = []
+
+    # Thêm ảnh vào contents (Multimodal)
+    if image_bytes:
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type=image_type)
+        contents.append(image_part)
+
+    # Bước 2: Xây dựng Prompt (Phân biệt Có KB và Không có KB)
+    if kb_context:
+        # Trường hợp 1: CÓ Context (Áp dụng thẻ KB_START/KB_END nghiêm ngặt)
+        full_prompt = f"""
 <KB_START>
 📚 KIẾN THỨC CẦN THAM KHẢO:
 {kb_context}
@@ -167,45 +199,52 @@ if user_question:
 
 --- HỎI ĐÁP ---
 Câu hỏi của học sinh:
-{user_question}
+{current_user_message}
 """
-    else:
-        # Trường hợp 2: KHÔNG CÓ Context
-        full_prompt = f"""
+    else:
+        # Trường hợp 2: KHÔNG CÓ Context
+        full_prompt = f"""
 Không có tài liệu tham khảo liên quan được tìm thấy.
 Hãy trả lời dựa trên kiến thức nền tảng của bạn (theo Chương trình GDPT 2018).
 
 Câu hỏi:
-{user_question}
+{current_user_message}
 """
 
-    contents.append(full_prompt)
+    contents.append(full_prompt)
 
-    # Bước 3: Gửi và Hiển thị
-    with st.chat_message("Học sinh"):
-        st.markdown(user_question)
-    st.session_state.messages.append({"role": "Học sinh", "content": user_question})
+    # Bước 3: Gửi và Hiển thị
+    with st.chat_message("Học sinh"):
+        if image_bytes:
+             st.markdown(f"**Bài tập Đính kèm Ảnh:**")
+        st.markdown(current_user_message)
+    st.session_state.messages.append({"role": "Học sinh", "content": current_user_message})
 
-    with st.spinner("⏳ Gia sư đang trả lời..."):
-        try:
-            response = st.session_state.chat_session.send_message(contents)
-            reply = response.text
-        except Exception as e:
-            reply = f"⚠️ Lỗi xử lý API Gemini: {type(e).__name__}: {e}. Vui lòng thử lại hoặc hỏi câu khác."
+    with st.spinner("⏳ Gia sư đang trả lời..."):
+        try:
+            response = st.session_state.chat_session.send_message(contents)
+            reply = response.text
+        except Exception as e:
+            reply = f"⚠️ Lỗi xử lý API Gemini: {type(e).__name__}: {e}. Vui lòng thử lại hoặc hỏi câu khác."
 
-    with st.chat_message("Gia Sư"):
-        st.markdown(reply)
-    st.session_state.messages.append({"role": "Gia Sư", "content": reply})
-    st.rerun()
+    with st.chat_message("Gia Sư"):
+        st.markdown(reply)
+    st.session_state.messages.append({"role": "Gia Sư", "content": reply})
+    
+    # Reset file uploader nếu có ảnh mới được upload (chống lặp)
+    if uploaded_file is not None:
+        st.session_state['file_key'] += 1
+        
+    st.rerun()
 
 # --- KHU VỰC QUẢN TRỊ ---
 with st.sidebar:
-    st.header("🔐 Khu vực quản trị")
-    pwd = st.text_input("Nhập mật khẩu admin:", type="password")
-    if "admin_password" in st.session_state and pwd == st.session_state.admin_password:
-        st.success("✅ Đăng nhập thành công!")
-        st.info(f"Tổng số tài liệu: **{len(knowledge_texts)}**")
-        st.markdown("📂 Thư mục: `/knowledge_base` (chứa tài liệu .pdf, .docx, .txt)")
-        st.markdown("🔁 Sau khi thêm tài liệu, **restart lại app** để cập nhật.")
-    elif pwd:
-        st.error("❌ Sai mật khẩu!")
+    st.header("🔐 Khu vực quản trị")
+    pwd = st.text_input("Nhập mật khẩu admin:", type="password")
+    if "admin_password" in st.session_state and pwd == st.session_state.admin_password:
+        st.success("✅ Đăng nhập thành công!")
+        st.info(f"Tổng số tài liệu: **{len(knowledge_texts)}**")
+        st.markdown("📂 Thư mục: `/knowledge_base` (chứa tài liệu .pdf, .docx, .txt)")
+        st.markdown("🔁 Sau khi thêm tài liệu, **restart lại app** để cập nhật.")
+    elif pwd:
+        st.error("❌ Sai mật khẩu!")
