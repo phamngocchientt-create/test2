@@ -133,9 +133,7 @@ Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
 2. **ĐỊNH DẠNG TRẢ LỜI:**
     - Trả lời bằng tiếng Việt, chi tiết từng bước.
     - **QUY TẮC PHÂN BIỆT LỜI NÓI VÀ LỜI GIẢI (CẢI TIẾN):**
-        - **LỜI HƯỚNG DẪN & GIẢI THÍCH:** Bất kỳ câu nào mang tính chất **trò chuyện, hướng dẫn, gợi ý, hoặc giải thích ý nghĩa của bước làm** (như Gia Sư đang nói chuyện với học sinh) **PHẢI được đặt trong ngoặc kép ("...")**. (Ví dụ: "Muốn tính được khối lượng của $\text{Fe}$, đầu tiên ta sẽ phải tìm số mol của nó.")
-        - **LỜI GIẢI, CÔNG THỨC & KẾT QUẢ:** Các bước **tính toán thực tế, áp dụng công thức, các phép tính, và đáp án cuối cùng** **PHẢI được tô đậm (dùng **...)** và **KHÔNG ĐƯỢC đặt trong ngoặc kép**. (Ví dụ: **$n_{\text{Fe}} = 0,2\ \text{mol}$**)
-    - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
+         - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
 """
     config = types.GenerateContentConfig(system_instruction=system_instruction)
     st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
