@@ -14,7 +14,7 @@ import time # Cần thiết cho cơ chế thử lại API
 st.set_page_config(page_title="Gia Sư Hóa Học THCS", page_icon="🧪")
 st.title("🧪 Gia Sư Hóa Học THCS")
 
-# --- KHỞI TẠO TRẠNG THÁI (SESSION STATE) ---
+# --- KHỞI TẠO TRẠNG THÁT (SESSION STATE) ---
 if 'file_key' not in st.session_state:
     st.session_state['file_key'] = 0
 if 'uploaded_image' not in st.session_state:
@@ -78,7 +78,7 @@ knowledge_texts = load_knowledge_base()
 def build_semantic_index(knowledge_texts):
     if not knowledge_texts:
         return None
-    model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") 
+    model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")    
     chunks, meta = [], []
     for item in knowledge_texts:
         for para in item["content"].split("\n"):
@@ -105,15 +105,16 @@ def search_knowledge_semantic(query, top_k=5):
     D, I = index.search(np.array(q_emb, dtype=np.float32), top_k)
 
     results = []
-    for idx, score in zip(I[0], D[0]): 
+    for idx, score in zip(I[0], D[0]):    
         if score > 0.65:
             results.append(f"📘 [Tài liệu: {meta[idx]}]\n{chunks[idx]}")
     return "\n\n---\n".join(results) if results else None
 
 # --- HỆ THỐNG CHAT ---
 if "chat_session" not in st.session_state:
-   system_instruction = r"""
-BẠN LÀ AI: Bạn là "Gia S Sư AI Hóa học THCS" – chuyên nghiệp, thân thiện, và kiên nhẫn.
+    # 📌 ĐÃ CHỈNH SỬA: CẬP NHẬT QUY TẮC ĐỊNH DẠNG TRẢ LỜI
+    system_instruction = r"""
+BẠN LÀ AI: Bạn là "Gia Sư AI Hóa học THCS" – chuyên nghiệp, thân thiện, và kiên nhẫn.
 Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
 
 **QUY TẮC CHƯƠNG TRÌNH & THUẬT NGỮ:**
@@ -131,21 +132,20 @@ Mục tiêu: Hướng dẫn học sinh hiểu và giải bài tập Hóa học.
 
 2. **ĐỊNH DẠNG TRẢ LỜI:**
     - Trả lời bằng tiếng Việt, chi tiết từng bước.
-    - **QUY TẮC PHÂN BIỆT RÕ RÀNG (CHỈNH SỬA VÀ TĂNG CƯỜNG):**
-        - **LỜI HƯỚNG DẪN & GIẢI THÍCH:** Bất kỳ câu nào mang tính chất **trò chuyện, hướng dẫn, gợi ý, hoặc giải thích ý nghĩa của bước làm** (như Gia Sư đang nói chuyện với học sinh) **PHẢI được đặt trong ngoặc kép ("...")**. 
-          Ví dụ: "Muốn tính được khối lượng của $\text{Fe}$ đầu tiên ta sẽ phải tìm số mol của nó."
-        - **LỜI GIẢI, CÔNG THỨC & KẾT QUẢ:** Các bước **tính toán thực tế, áp dụng công thức, các phép tính, và đáp án cuối cùng** **PHẢI được tô đậm (dùng **...)** và KHÔNG ĐƯỢC đặt trong ngoặc kép.
-          Ví dụ: **Số mol của $\text{Fe}$ thu được là:**; **$n_{\text{Fe}} = 0,2\ \text{mol}$**
+    - **QUY TẮC PHÂN BIỆT LỜI NÓI VÀ LỜI GIẢI (CẢI TIẾN):**
+        - **LỜI HƯỚNG DẪN & GIẢI THÍCH:** Bất kỳ câu nào mang tính chất **trò chuyện, hướng dẫn, gợi ý, hoặc giải thích ý nghĩa của bước làm** (như Gia Sư đang nói chuyện với học sinh) **PHẢI được đặt trong ngoặc kép ("...")**. (Ví dụ: "Muốn tính được khối lượng của $\text{Fe}$, đầu tiên ta sẽ phải tìm số mol của nó.")
+        - **LỜI GIẢI, CÔNG THỨC & KẾT QUẢ:** Các bước **tính toán thực tế, áp dụng công thức, các phép tính, và đáp án cuối cùng** **PHẢI được tô đậm (dùng **...)** và **KHÔNG ĐƯỢC đặt trong ngoặc kép**. (Ví dụ: **$n_{\text{Fe}} = 0,2\ \text{mol}$**)
     - **LaTeX:** Mọi công thức, phương trình, đơn vị và ký hiệu PHẢI được bọc trong cú pháp \LaTeX (dùng '$' hoặc '$$').
 """
-st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
+    config = types.GenerateContentConfig(system_instruction=system_instruction)
+    st.session_state.chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 # --- GIAO DIỆN VÀ XỬ LÝ INPUT (ĐÃ SỬA LỖI LẶP VÀ HỎI LẠI UX) ---
-uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)", 
+uploaded_file = st.file_uploader("📷 Tải ảnh bài tập (JPG/PNG)",    
                                  type=["jpg", "jpeg", "png"],
                                  key=st.session_state['file_key'])
 user_question = st.chat_input("✏️ Nhập câu hỏi Hóa học...")
