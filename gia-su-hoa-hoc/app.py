@@ -93,7 +93,7 @@ def build_semantic_index(knowledge_texts):
 
 semantic_index = build_semantic_index(knowledge_texts)
 
-def search_knowledge_semantic(query, top_k=5):
+def search_knowledge_semantic(query, top_k=10):
     if not semantic_index:
         return None
     model = semantic_index["model"]
